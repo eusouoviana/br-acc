@@ -40,11 +40,12 @@ fi
 
 log "Waiting for health check..."
 if [ "$DRY_RUN" = false ]; then
-    sleep 10
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-        log "Health check passed."
+    sleep 15
+    HEALTH_URL="https://${DOMAIN:-localhost}/health"
+    if curl -sf -k "$HEALTH_URL" > /dev/null 2>&1; then
+        log "Health check passed ($HEALTH_URL)."
     else
-        log "Health check failed!"
+        log "Health check failed ($HEALTH_URL)!"
         docker compose -f "$COMPOSE_FILE" logs --tail=50
         exit 1
     fi

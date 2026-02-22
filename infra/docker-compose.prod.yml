@@ -56,8 +56,6 @@ services:
   frontend:
     build: ../frontend
     restart: unless-stopped
-    environment:
-      VITE_API_URL: https://${DOMAIN}
     networks:
       - icarus
     depends_on:

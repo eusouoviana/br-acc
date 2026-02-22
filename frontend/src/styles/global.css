@@ -1,0 +1,80 @@
+:root {
+  /* Background */
+  --bg-primary: #0d100e;
+  --bg-secondary: #141a16;
+  --bg-tertiary: #1a211c;
+
+  /* Text */
+  --text-primary: #e0e0e0;
+  --text-secondary: #8a8a8a;
+  --text-muted: #555;
+
+  /* Accent */
+  --accent: #e07a2f;
+  --accent-hover: #f08a3f;
+
+  /* Border */
+  --border: rgba(255, 255, 255, 0.04);
+  --border-hover: rgba(255, 255, 255, 0.1);
+
+  /* Entity type colors */
+  --color-person: #e07a2f;
+  --color-company: #dd6b20;
+  --color-contract: #38a169;
+  --color-finance: #3b82f6;
+  --color-sanction: #dc2626;
+  --color-legal: #ca8a04;
+  --color-health: #ec4899;
+  --color-environment: #0d9488;
+  --color-labor: #64748b;
+  --color-education: #a855f7;
+  --color-regulatory: #2dd4bf;
+  --color-property: #8b5cf6;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Typography */
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg-primary);
+}

@@ -1,0 +1,54 @@
+[project]
+name = "icarus-etl"
+version = "0.1.0"
+description = "ICARUS ETL — Data ingestion pipelines for Brazilian public data"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+dependencies = [
+    "neo4j>=5.27.0",
+    "pandas>=2.2.0",
+    "httpx>=0.28.0",
+    "click>=8.1.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.14.0",
+    "ruff>=0.9.0",
+    "pandas-stubs>=2.2.0",
+]
+resolution = [
+    "splink>=4.0.0",
+]
+bigquery = [
+    "basedosdados>=2.0.0",
+]
+
+[project.scripts]
+icarus-etl = "icarus_etl.runner:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/icarus_etl"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM", "TCH"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

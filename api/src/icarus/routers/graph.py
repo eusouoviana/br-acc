@@ -34,32 +34,32 @@ async def get_graph(
 ) -> GraphResponse:
     type_list = [t.strip().lower() for t in entity_types.split(",")] if entity_types else None
 
-    node_records = await execute_query(
+    records = await execute_query(
         session,
         "graph_expand",
-        {
-            "entity_id": entity_id,
-            "entity_types": type_list,
-            "depth": depth,
-        },
+        {"entity_id": entity_id, "entity_types": type_list, "depth": depth},
     )
 
-    if not node_records:
+    if not records:
         raise HTTPException(status_code=404, detail="Entity not found")
 
+    record = records[0]
+    raw_nodes = record["nodes"]
+    raw_rels = record["relationships"]
+    center_id = record["center_id"]
+
+    # Parse nodes
     nodes: list[GraphNode] = []
-    node_ids: list[str] = []
-    seen: set[str] = set()
+    node_ids: set[str] = set()
 
-    for record in node_records:
-        node_id = record["node_id"]
-        if node_id in seen:
+    for node in raw_nodes:
+        node_id = node.element_id
+        labels = list(node.labels)
+
+        if type_list and not any(lb.lower() in type_list for lb in labels):
             continue
-        seen.add(node_id)
-        node_ids.append(node_id)
 
-        node = record["node"]
-        labels = record["node_labels"]
+        node_ids.add(node_id)
         props = dict(node)
         source_val = props.pop("source", None)
         sources: list[SourceAttribution] = []
@@ -68,8 +68,14 @@ async def get_graph(
         elif isinstance(source_val, list):
             sources = [SourceAttribution(database=s) for s in source_val]
 
-        doc_id = record.get("document_id")
-        document_id = str(doc_id) if doc_id and not str(doc_id).startswith("4:") else None
+        doc_id = (
+            props.get("cpf")
+            or props.get("cnpj")
+            or props.get("contract_id")
+            or props.get("sanction_id")
+            or props.get("amendment_id")
+        )
+        document_id = str(doc_id) if doc_id else None
 
         nodes.append(GraphNode(
             id=node_id,
@@ -81,22 +87,23 @@ async def get_graph(
             is_pep=_is_pep(props),
         ))
 
-    edge_records = await execute_query(
-        session,
-        "graph_edges",
-        {"node_ids": node_ids},
-    )
-
+    # Parse edges — only between accepted nodes
     edges: list[GraphEdge] = []
     seen_edges: set[str] = set()
 
-    for record in edge_records:
-        rel_id = record["rel_id"]
+    for rel in raw_rels:
+        rel_id = rel.element_id
         if rel_id in seen_edges:
             continue
         seen_edges.add(rel_id)
 
-        rel_props = dict(record["rel_props"]) if record["rel_props"] else {}
+        source_id = rel.start_node.element_id
+        target_id = rel.end_node.element_id
+
+        if source_id not in node_ids or target_id not in node_ids:
+            continue
+
+        rel_props = dict(rel)
         confidence = float(rel_props.pop("confidence", 1.0))
         rel_source_val = rel_props.pop("source", None)
         rel_sources: list[SourceAttribution] = []
@@ -107,18 +114,12 @@ async def get_graph(
 
         edges.append(GraphEdge(
             id=rel_id,
-            source=record["source_id"],
-            target=record["target_id"],
-            type=record["rel_type"],
+            source=source_id,
+            target=target_id,
+            type=rel.type,
             properties=rel_props,
             confidence=confidence,
             sources=rel_sources,
         ))
 
-    center_id = node_records[0]["center_id"]
-
-    return GraphResponse(
-        nodes=nodes,
-        edges=edges,
-        center_id=center_id,
-    )
+    return GraphResponse(nodes=nodes, edges=edges, center_id=center_id)

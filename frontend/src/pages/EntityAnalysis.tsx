@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 
 import {
-  getEntity,
+  getEntityByElementId,
   getEntityPatterns,
   getBaseline,
   listInvestigations,
@@ -104,7 +104,7 @@ export function EntityAnalysis() {
     setEntityLoading(true);
 
     Promise.all([
-      getEntity(id),
+      getEntityByElementId(id),
       getEntityPatterns(id),
       getBaseline(id),
     ])

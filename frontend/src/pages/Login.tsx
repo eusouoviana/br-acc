@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useAuthStore } from "@/stores/auth";
 
@@ -9,38 +9,29 @@ import styles from "./Login.module.css";
 export function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { login, register, loading, error } = useAuthStore();
+  const { login, loading, error } = useAuthStore();
 
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (mode === "login") {
-      await login(email, password);
-    } else {
-      await register(email, password, inviteCode);
-    }
-
-    // Check if login succeeded (token is set)
+    await login(email, password);
     if (useAuthStore.getState().token) {
-      navigate("/investigations");
+      navigate("/app");
     }
   };
 
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <h1 className={styles.title}>
-          {mode === "login" ? t("auth.login") : t("auth.register")}
-        </h1>
+        <div className={styles.header}>
+          <h1 className={styles.title}>{t("auth.loginTitle")}</h1>
+          <p className={styles.subtitle}>{t("auth.loginSubtitle")}</p>
+        </div>
 
         <form className={styles.form} onSubmit={handleSubmit}>
-          {error && (
-            <div className={styles.error}>{t(error)}</div>
-          )}
+          {error && <div className={styles.error}>{t(error)}</div>}
 
           <div className={styles.field}>
             <label className={styles.label} htmlFor="email">
@@ -69,48 +60,24 @@ export function Login() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              autoComplete="current-password"
             />
           </div>
-
-          {mode === "register" && (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="inviteCode">
-                {t("auth.inviteCode")}
-              </label>
-              <input
-                id="inviteCode"
-                className={styles.input}
-                type="text"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-          )}
 
           <button
             type="submit"
             className={styles.submitBtn}
             disabled={loading}
           >
-            {loading
-              ? t("common.loading")
-              : mode === "login"
-                ? t("auth.login")
-                : t("auth.register")}
+            {loading ? t("common.loading") : t("auth.login")}
           </button>
         </form>
 
-        <button
-          className={styles.switchBtn}
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
-          type="button"
-        >
-          {mode === "login"
-            ? t("auth.switchToRegister")
-            : t("auth.switchToLogin")}
-        </button>
+        <div className={styles.footer}>
+          <Link to="/register" className={styles.switchLink}>
+            {t("auth.switchToRegister")}
+          </Link>
+        </div>
       </div>
     </div>
   );

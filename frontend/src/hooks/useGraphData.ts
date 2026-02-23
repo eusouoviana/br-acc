@@ -1,38 +1,58 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { type GraphData, getGraphData } from "@/api/client";
+
+const cache = new Map<string, GraphData>();
 
 interface UseGraphDataResult {
   data: GraphData | null;
   loading: boolean;
   error: string | null;
-  refetch: (depth?: number, types?: string[]) => void;
 }
 
 export function useGraphData(
   entityId: string | undefined,
-  initialDepth = 2,
+  depth: number,
 ): UseGraphDataResult {
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(
-    (depth = initialDepth, types?: string[]) => {
-      if (!entityId) return;
-      setLoading(true);
-      setError(null);
-      getGraphData(entityId, depth, types)
-        .then(setData)
-        .catch((err: Error) => setError(err.message))
-        .finally(() => setLoading(false));
-    },
-    [entityId, initialDepth],
-  );
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    if (!entityId) return;
 
-  return { data, loading, error, refetch };
+    const key = `${entityId}:${depth}`;
+    const cached = cache.get(key);
+    if (cached) {
+      setData(cached);
+    }
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setError(null);
+
+    getGraphData(entityId, depth, undefined, controller.signal)
+      .then((result) => {
+        cache.set(key, result);
+        setData(result);
+      })
+      .catch((err: Error) => {
+        if (err.name !== "AbortError") {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [entityId, depth]);
+
+  return { data, loading, error };
 }

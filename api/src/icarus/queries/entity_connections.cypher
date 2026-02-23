@@ -10,3 +10,4 @@ RETURN e, r, connected,
        elementId(startNode(r)) AS source_id,
        elementId(endNode(r)) AS target_id,
        elementId(r) AS rel_id
+LIMIT 200

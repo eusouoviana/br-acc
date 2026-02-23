@@ -14,8 +14,11 @@ interface TimelineViewProps {
 }
 
 function formatDate(iso: string): string {
+  if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("pt-BR", {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString("pt-BR", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",

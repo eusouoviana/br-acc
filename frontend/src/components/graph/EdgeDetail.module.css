@@ -1,36 +1,30 @@
 .panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 280px;
-  height: 100%;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: var(--space-sm) var(--space-md);
   overflow-y: auto;
-  z-index: 10;
+  max-height: 200px;
 }
 
 .close {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
+  float: right;
   background: none;
   border: none;
   color: var(--text-muted);
   font-size: 1.25rem;
   cursor: pointer;
   line-height: 1;
+  padding: 0;
 }
 
 .close:hover {
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .type {
-  margin: 0 0 var(--space-md);
+  margin: 0 0 var(--space-sm);
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--accent);
 }
 
@@ -39,7 +33,7 @@
   grid-template-columns: auto 1fr;
   gap: var(--space-xs) var(--space-sm);
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-xs);
 }
 
 .fields dt {
@@ -49,13 +43,13 @@
 
 .fields dd {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   word-break: break-all;
 }
 
 .mono {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--font-size-2xs);
 }
 
 .muted {

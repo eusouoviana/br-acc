@@ -29,30 +29,31 @@ const sampleData: GraphData = {
   ],
 };
 
+const defaultProps = {
+  data: sampleData,
+  centerId: "n1",
+  enabledTypes: new Set(["person", "company", "sanction"]),
+  enabledRelTypes: new Set(["PARTNER", "SANCTIONED"]),
+  hiddenNodeIds: new Set<string>(),
+  selectedNodeIds: new Set<string>(),
+  hoveredNodeId: null,
+  layoutMode: "force" as const,
+  onNodeClick: vi.fn(),
+  onNodeHover: vi.fn(),
+  onNodeRightClick: vi.fn(),
+  onLayoutChange: vi.fn(),
+  onFullscreen: vi.fn(),
+  sidebarCollapsed: false,
+};
+
 describe("GraphCanvas", () => {
   it("renders ForceGraph2D component", () => {
-    render(
-      <GraphCanvas
-        data={sampleData}
-        centerId="n1"
-        enabledTypes={new Set(["person", "company", "sanction"])}
-        onNodeClick={vi.fn()}
-      />,
-    );
-
+    render(<GraphCanvas {...defaultProps} />);
     expect(screen.getByTestId("force-graph")).toBeInTheDocument();
   });
 
   it("passes graphData with correct nodes and links", () => {
-    render(
-      <GraphCanvas
-        data={sampleData}
-        centerId="n1"
-        enabledTypes={new Set(["person", "company", "sanction"])}
-        onNodeClick={vi.fn()}
-      />,
-    );
-
+    render(<GraphCanvas {...defaultProps} />);
     const graphData = capturedProps.graphData as { nodes: unknown[]; links: unknown[] };
     expect(graphData.nodes).toHaveLength(3);
     expect(graphData.links).toHaveLength(2);
@@ -61,30 +62,20 @@ describe("GraphCanvas", () => {
   it("filters nodes by enabledTypes", () => {
     render(
       <GraphCanvas
-        data={sampleData}
-        centerId="n1"
+        {...defaultProps}
         enabledTypes={new Set(["person", "company"])}
-        onNodeClick={vi.fn()}
       />,
     );
 
     const graphData = capturedProps.graphData as { nodes: { id: string }[]; links: unknown[] };
     expect(graphData.nodes).toHaveLength(2);
     expect(graphData.nodes.map((n) => n.id)).toEqual(["n1", "n2"]);
-    // Edge n2->n3 removed because n3 is filtered out
     expect(graphData.links).toHaveLength(1);
   });
 
   it("invokes onNodeClick when node is clicked", () => {
     const onNodeClick = vi.fn();
-    render(
-      <GraphCanvas
-        data={sampleData}
-        centerId="n1"
-        enabledTypes={new Set(["person", "company", "sanction"])}
-        onNodeClick={onNodeClick}
-      />,
-    );
+    render(<GraphCanvas {...defaultProps} onNodeClick={onNodeClick} />);
 
     const handler = capturedProps.onNodeClick as (node: { id: string }) => void;
     handler({ id: "n2" });

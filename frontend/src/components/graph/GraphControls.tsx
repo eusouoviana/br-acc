@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { type EntityType, entityColors } from "@/styles/tokens";
@@ -13,7 +14,7 @@ interface GraphControlsProps {
 
 const ENTITY_TYPES = Object.keys(entityColors) as EntityType[];
 
-export function GraphControls({
+function GraphControlsInner({
   depth,
   onDepthChange,
   enabledTypes,
@@ -58,3 +59,5 @@ export function GraphControls({
     </div>
   );
 }
+
+export const GraphControls = memo(GraphControlsInner);

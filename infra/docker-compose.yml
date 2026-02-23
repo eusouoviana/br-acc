@@ -7,9 +7,9 @@ services:
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_server_memory_heap_initial__size: 2G
-      NEO4J_server_memory_heap_max__size: 4G
-      NEO4J_server_memory_pagecache_size: 4G
+      NEO4J_server_memory_heap_initial__size: 512M
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 1G
     volumes:
       - neo4j-data:/data
       - ./neo4j/import:/var/lib/neo4j/import
@@ -44,3 +44,5 @@ services:
 
 volumes:
   neo4j-data:
+    external:
+      name: d71967adc2d23c9cce3b6c9e742d4b22c7bff9b78b26e6d5f9c2ce4abaf18051

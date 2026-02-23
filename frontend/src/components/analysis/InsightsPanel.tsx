@@ -146,7 +146,7 @@ function InsightsContent({
       {/* Baseline */}
       {baseline && baseline.comparisons.length > 0 && (
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>{t("analysis.baseline")}</h3>
+          <h3 className={styles.sectionTitle}>{t("analysis.baselineComparison")}</h3>
           <div className={styles.baselineTable}>
             {baseline.comparisons.map((c, i) => (
               <div key={i} className={styles.baselineRow}>

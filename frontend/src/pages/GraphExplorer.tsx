@@ -1,86 +1,127 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
 import { Spinner } from "@/components/common/Spinner";
 import { EntityDetail } from "@/components/entity/EntityDetail";
+import { ControlsSidebar } from "@/components/graph/ControlsSidebar";
 import { GraphCanvas } from "@/components/graph/GraphCanvas";
-import { GraphControls } from "@/components/graph/GraphControls";
 import { useGraphData } from "@/hooks/useGraphData";
-import { entityColors } from "@/styles/tokens";
+import { useGraphExplorerStore } from "@/stores/graphExplorer";
 
 import styles from "./GraphExplorer.module.css";
-
-const ALL_TYPES = new Set(Object.keys(entityColors));
 
 export function GraphExplorer() {
   const { t } = useTranslation();
   const { entityId } = useParams<{ entityId: string }>();
-  const [depth, setDepth] = useState(2);
-  const [enabledTypes, setEnabledTypes] = useState<Set<string>>(ALL_TYPES);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const { data, loading, error, refetch } = useGraphData(entityId, depth);
+  const store = useGraphExplorerStore();
+  const { depth, enabledTypes, enabledRelTypes, selectedNodeIds, sidebarCollapsed, detailPanelOpen } = store;
 
-  const handleDepthChange = useCallback(
-    (newDepth: number) => {
-      setDepth(newDepth);
-      const types = enabledTypes.size < ALL_TYPES.size ? [...enabledTypes] : undefined;
-      refetch(newDepth, types);
-    },
-    [enabledTypes, refetch],
-  );
+  const { data, loading, error } = useGraphData(entityId, depth);
 
-  const handleToggleType = useCallback((type: string) => {
-    setEnabledTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) {
-        next.delete(type);
-      } else {
-        next.add(type);
+  useEffect(() => {
+    store.reset();
+  }, [entityId]);
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (data) {
+      for (const node of data.nodes) {
+        counts[node.type] = (counts[node.type] ?? 0) + 1;
       }
-      return next;
-    });
-  }, []);
+    }
+    return counts;
+  }, [data]);
 
-  const handleNodeClick = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-  }, []);
+  const relTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (data) {
+      for (const edge of data.edges) {
+        counts[edge.type] = (counts[edge.type] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [data]);
+
+  const selectedNodeId = useMemo(() => {
+    const ids = Array.from(selectedNodeIds);
+    return ids.length === 1 ? ids[0] : null;
+  }, [selectedNodeIds]);
 
   const handleCloseDetail = useCallback(() => {
-    setSelectedNodeId(null);
-  }, []);
+    store.selectNode(null);
+  }, [store]);
 
   return (
     <div className={styles.explorer}>
-      <div className={styles.sidebar}>
-        <GraphControls
-          depth={depth}
-          onDepthChange={handleDepthChange}
-          enabledTypes={enabledTypes}
-          onToggleType={handleToggleType}
-        />
-      </div>
-
-      <div className={styles.graphArea}>
-        {loading && <Spinner />}
-        {error && <p className={styles.status}>{error}</p>}
-        {data && entityId && (
-          <GraphCanvas
-            data={data}
-            centerId={entityId}
+      <Group orientation="horizontal" id="graph-explorer">
+        <Panel
+          defaultSize={sidebarCollapsed ? 4 : 18}
+          minSize={4}
+          maxSize={30}
+          collapsible
+        >
+          <ControlsSidebar
+            collapsed={sidebarCollapsed}
+            onToggle={store.toggleSidebar}
+            depth={depth}
+            onDepthChange={store.setDepth}
             enabledTypes={enabledTypes}
-            onNodeClick={handleNodeClick}
+            onToggleType={store.toggleType}
+            enabledRelTypes={enabledRelTypes}
+            onToggleRelType={store.toggleRelType}
+            typeCounts={typeCounts}
+            relTypeCounts={relTypeCounts}
           />
-        )}
-        {!loading && !data && !error && (
-          <p className={styles.status}>{t("graph.noData")}</p>
-        )}
-      </div>
+        </Panel>
 
-      {selectedNodeId && (
-        <EntityDetail entityId={selectedNodeId} onClose={handleCloseDetail} />
-      )}
+        <Separator className={styles.resizeHandle} />
+
+        <Panel minSize={30}>
+          <div className={styles.canvasArea}>
+            {loading && (
+              <div className={styles.loadingOverlay}>
+                <Spinner variant="scan" size="lg" />
+              </div>
+            )}
+            {error && <p className={styles.status}>{error}</p>}
+            {data && entityId && (
+              <GraphCanvas
+                data={data}
+                centerId={entityId}
+                enabledTypes={enabledTypes}
+                enabledRelTypes={enabledRelTypes}
+                hiddenNodeIds={store.hiddenNodeIds}
+                selectedNodeIds={selectedNodeIds}
+                hoveredNodeId={store.hoveredNodeId}
+                layoutMode={store.layoutMode}
+                onNodeClick={(id) => store.selectNode(id)}
+                onNodeHover={(id) => store.setHoveredNode(id)}
+                onNodeRightClick={(x, y, nodeId) => store.setContextMenu({ x, y, nodeId })}
+                onLayoutChange={store.setLayoutMode}
+                onFullscreen={store.toggleFullscreen}
+                sidebarCollapsed={sidebarCollapsed}
+              />
+            )}
+            {!loading && !data && !error && (
+              <p className={styles.status}>{t("graph.noData")}</p>
+            )}
+          </div>
+        </Panel>
+
+        {selectedNodeId && detailPanelOpen && (
+          <>
+            <Separator className={styles.resizeHandle} />
+            <Panel defaultSize={25} minSize={15} maxSize={40}>
+              <div className={styles.detailPanel}>
+                <EntityDetail entityId={selectedNodeId} onClose={handleCloseDetail} />
+              </div>
+            </Panel>
+          </>
+        )}
+      </Group>
     </div>
   );
 }

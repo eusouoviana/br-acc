@@ -1,4 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import i18n from "@/i18n";
+
+import styles from "./ErrorBoundary.module.css";
 
 interface Props {
   children: ReactNode;
@@ -21,36 +24,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const t = i18n.t.bind(i18n);
       return (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            minHeight: "100vh",
-            fontFamily: "var(--font-mono)",
-            color: "var(--text-secondary)",
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <h1 style={{ color: "var(--accent)", marginBottom: "1rem" }}>
-              ICARUS
-            </h1>
-            <p>Something went wrong. Please reload the page.</p>
+        <div className={styles.container}>
+          <div className={styles.content}>
+            <h1 className={styles.title}>{t("error.title")}</h1>
+            <p className={styles.message}>{t("error.message")}</p>
             <button
               onClick={() => window.location.reload()}
-              style={{
-                marginTop: "1rem",
-                padding: "0.5rem 1rem",
-                background: "var(--accent)",
-                color: "var(--bg-primary)",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontFamily: "var(--font-mono)",
-              }}
+              className={styles.reloadBtn}
             >
-              Reload
+              {t("error.reload")}
             </button>
           </div>
         </div>

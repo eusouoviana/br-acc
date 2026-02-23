@@ -83,7 +83,7 @@ class TestExecuteQuery:
 
         try:
             records = await execute_query(session, "test", {"key": "value"})
-            session.run.assert_called_once_with("MATCH (n) RETURN n", {"key": "value"})
+            session.run.assert_called_once_with("MATCH (n) RETURN n", {"key": "value"}, timeout=15)
             assert records == [mock_record]
         finally:
             mod.QUERIES_DIR = original

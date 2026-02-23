@@ -1,4 +1,4 @@
-import bisect
+import math
 
 from neo4j import AsyncSession
 
@@ -15,13 +15,36 @@ FACTOR_WEIGHTS = {
 }
 
 
-def _percentile(values: list[float], target: float) -> float:
-    """Compute the percentile rank of target within a sorted list of values."""
-    if not values:
+def _conn_percentile(count: int) -> float:
+    """Heuristic percentile for connection count (power-law distribution)."""
+    if count == 0:
         return 0.0
-    sorted_vals = sorted(values)
-    pos = bisect.bisect_right(sorted_vals, target)
-    return (pos / len(sorted_vals)) * 100.0
+    if count <= 2:
+        return 25.0
+    if count <= 5:
+        return 50.0
+    if count <= 15:
+        return 75.0
+    if count <= 50:
+        return 90.0
+    return min(99.0, 90.0 + math.log10(count) * 3)
+
+
+def _fin_percentile(volume: float) -> float:
+    """Heuristic percentile for financial volume (log-normal distribution)."""
+    if volume <= 0:
+        return 0.0
+    log_v = math.log10(volume + 1)
+    # 100K = 5, 1M = 6, 10M = 7, 100M = 8, 1B = 9
+    if log_v < 5:
+        return min(25.0, log_v * 5)
+    if log_v < 6:
+        return 25.0 + (log_v - 5) * 25
+    if log_v < 7:
+        return 50.0 + (log_v - 6) * 25
+    if log_v < 8:
+        return 75.0 + (log_v - 7) * 15
+    return min(99.0, 90.0 + (log_v - 8) * 5)
 
 
 async def compute_exposure(
@@ -43,46 +66,20 @@ async def compute_exposure(
     entity_labels: list[str] = record["entity_labels"]
     cnae = record["cnae_principal"]
 
-    entity_type = entity_labels[0] if entity_labels else "Unknown"
     is_company = "Company" in entity_labels
 
-    # Determine peer group
+    # Determine peer group label
     if is_company and cnae:
         peer_group = f"CNAE {cnae}"
-        peer_label = "Company"
-        peer_cnae: str | None = cnae
     elif is_company:
         peer_group = "Company (all)"
-        peer_label = "Company"
-        peer_cnae = None
     else:
+        entity_type = entity_labels[0] if entity_labels else "Unknown"
         peer_group = f"Person ({entity_type})"
-        peer_label = "Person"
-        peer_cnae = None
 
-    # Get peer distribution for percentile computation
-    peer_record = await execute_query_single(
-        session,
-        "entity_score_peers",
-        {
-            "entity_id": entity_id,
-            "peer_label": peer_label,
-            "cnae": peer_cnae,
-        },
-        timeout=30,
-    )
-
-    peer_count = 0
-    conn_percentile = 50.0
-    fin_percentile = 50.0
-
-    if peer_record:
-        peer_count = int(peer_record["peer_count"])
-        if peer_count > 0:
-            conn_values = [float(v) for v in peer_record["connection_counts"]]
-            fin_values = [float(v) for v in peer_record["financial_volumes"]]
-            conn_percentile = _percentile(conn_values, float(connection_count))
-            fin_percentile = _percentile(fin_values, financial_volume)
+    # Heuristic percentiles — avoids 20s peer sampling query on 56M nodes
+    conn_percentile = _conn_percentile(connection_count)
+    fin_percentile = _fin_percentile(financial_volume)
 
     # Source percentile: scale 0-4 sources to 0-100
     source_percentile = min(source_count * 25.0, 100.0)
@@ -130,12 +127,6 @@ async def compute_exposure(
         ),
     ]
 
-    # If peer count < 10, down-weight peer-dependent factors
-    if peer_count < 10:
-        for factor in factors:
-            if factor.name in ("connections", "financial"):
-                factor.weight *= 0.5
-
     # Compute weighted exposure index
     total_weight = sum(f.weight for f in factors)
     if total_weight > 0:
@@ -151,6 +142,6 @@ async def compute_exposure(
         exposure_index=exposure_index,
         factors=factors,
         peer_group=peer_group,
-        peer_count=peer_count,
+        peer_count=0,
         sources=[SourceAttribution(database="neo4j_analysis")],
     )

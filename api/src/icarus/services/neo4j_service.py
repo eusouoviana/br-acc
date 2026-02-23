@@ -33,10 +33,11 @@ async def execute_query(
     session: AsyncSession,
     query_name: str,
     parameters: dict[str, Any] | None = None,
+    timeout: float = 15,
 ) -> list[Record]:
     """Execute a named .cypher query with parameter binding."""
     cypher = CypherLoader.load(query_name)
-    result = await session.run(cypher, parameters or {})
+    result = await session.run(cypher, parameters or {}, timeout=timeout)
     return [record async for record in result]
 
 
@@ -44,10 +45,11 @@ async def execute_query_single(
     session: AsyncSession,
     query_name: str,
     parameters: dict[str, Any] | None = None,
+    timeout: float = 15,
 ) -> Record | None:
     """Execute a named query and return a single record."""
     cypher = CypherLoader.load(query_name)
-    result = await session.run(cypher, parameters or {})
+    result = await session.run(cypher, parameters or {}, timeout=timeout)
     return await result.single()
 
 

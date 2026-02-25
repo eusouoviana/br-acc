@@ -136,6 +136,7 @@ class TestTseFiliadosTransform:
         assert "affiliation_date" in m
         assert "status" in m
         assert "municipality_id" in m
+        assert "birth_date" in m
         assert "source" in m
         assert m["source"] == "tse_filiados"
 
@@ -147,6 +148,8 @@ class TestTseFiliadosTransform:
         r = pipeline.person_rels[0]
         assert "source_name" in r
         assert "source_uf" in r
+        assert "source_birth_date" in r
+        assert "source_municipality_id" in r
         assert "target_key" in r
         assert "party" in r
         assert "affiliation_date" in r
@@ -200,7 +203,7 @@ class TestTseFiliadosLoad:
         ]
         assert len(rel_calls) >= 1
 
-    def test_load_relationship_uses_name_uf_match(self) -> None:
+    def test_load_uses_tiered_matching(self) -> None:
         pipeline = _make_pipeline()
         _load_fixture_data(pipeline)
         pipeline.transform()
@@ -209,11 +212,27 @@ class TestTseFiliadosLoad:
         session_mock = pipeline.driver.session.return_value.__enter__.return_value
         run_calls = session_mock.run.call_args_list
 
-        rel_calls = [
+        # Should have match_confidence in relationship queries
+        confidence_calls = [
             call for call in run_calls
-            if "name_uf_exact" in str(call)
+            if "match_confidence" in str(call)
         ]
-        assert len(rel_calls) >= 1
+        assert len(confidence_calls) >= 1
+
+    def test_load_tiers_split_correctly(self) -> None:
+        pipeline = _make_pipeline()
+        _load_fixture_data(pipeline)
+        pipeline.transform()
+        pipeline.load()
+
+        session_mock = pipeline.driver.session.return_value.__enter__.return_value
+        run_calls = session_mock.run.call_args_list
+
+        high_calls = [c for c in run_calls if "'high'" in str(c)]
+        low_calls = [c for c in run_calls if "'low'" in str(c)]
+        # Fixture: 2 rows with birth_date (high), 1 with muni only (medium), 1 without either (low)
+        assert len(high_calls) >= 1
+        assert len(low_calls) >= 1
 
     def test_load_skips_when_empty(self) -> None:
         pipeline = _make_pipeline()

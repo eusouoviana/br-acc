@@ -1,6 +1,6 @@
-nome,sigla_uf,id_municipio_tse,sigla_partido,data_filiacao,situacao_registro,data_desfiliacao,data_cancelamento,data_regularizacao,motivo_cancelamento
-João da Silva,SP,71072,PT,2010-03-15,REGULAR,,,,
-Maria Souza,RJ,58017,MDB,2015-07-22,REGULAR,,,,
-Pedro Santos,MG,41238,PSDB,2008-11-30,CANCELADO,,,2020-05-10,Desfiliação automática
-Ana Lima,SP,71072,PL,2020-01-10,REGULAR,,,,
-,DF,53001,PP,2019-06-01,REGULAR,,,,
+nome,sigla_uf,id_municipio_tse,sigla_partido,data_filiacao,situacao_registro,data_desfiliacao,data_cancelamento,data_regularizacao,motivo_cancelamento,data_nascimento,numero_inscricao
+João da Silva,SP,71072,PT,2010-03-15,REGULAR,,,,,1985-04-12,001234567
+Maria Souza,RJ,58017,MDB,2015-07-22,REGULAR,,,,,1990-08-03,009876543
+Pedro Santos,MG,41238,PSDB,2008-11-30,CANCELADO,,,2020-05-10,Desfiliação automática,,005551234
+Ana Lima,SP,,PL,2020-01-10,REGULAR,,,,,,
+,DF,53001,PP,2019-06-01,REGULAR,,,,,,

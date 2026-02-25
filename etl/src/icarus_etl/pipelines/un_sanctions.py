@@ -148,7 +148,7 @@ class UnSanctionsPipeline(Pipeline):
             person_query = (
                 "UNWIND $rows AS row "
                 "MATCH (s:InternationalSanction {sanction_id: row.source_key}) "
-                "MATCH (p:Person {nome: row.target_key}) "
+                "MATCH (p:Person {name: row.target_key}) "
                 "MERGE (p)-[r:UN_SANCTIONED]->(s) "
                 "SET r.matched_by = 'name'"
             )

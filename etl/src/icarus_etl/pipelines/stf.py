@@ -107,7 +107,7 @@ class StfPipeline(Pipeline):
         if self.rapporteur_rels:
             query = (
                 "UNWIND $rows AS row "
-                "MATCH (p:Person {nome: row.source_key}) "
+                "MATCH (p:Person {name: row.source_key}) "
                 "MATCH (lc:LegalCase {case_id: row.target_key}) "
                 "MERGE (p)-[:RELATOR_DE]->(lc)"
             )

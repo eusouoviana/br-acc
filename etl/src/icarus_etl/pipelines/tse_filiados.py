@@ -4,9 +4,9 @@ Data source: BigQuery table basedosdados.br_tse_filiacao_partidaria.microdados
 Pre-exported to CSV via download script.
 
 Limitation: TSE filiados data does NOT contain CPF. Matching to existing
-Person nodes is done by exact normalized name + UF, which is inherently
-imprecise for common names. A match_method property is stored on the
-relationship to make this limitation transparent.
+Person nodes uses tiered confidence: name+UF+birth_date (high),
+name+UF+municipality (medium), name+UF only (low). A match_confidence
+property is stored on the relationship to make this transparent.
 """
 
 from __future__ import annotations
@@ -95,6 +95,7 @@ class TseFiliadosPipeline(Pipeline):
             affiliation_date = parse_date(str(row.get("data_filiacao", "")))
             status = str(row.get("situacao_registro", "")).strip()
             municipality_id = str(row.get("id_municipio_tse", "")).strip()
+            birth_date = parse_date(str(row.get("data_nascimento", "")))
 
             mid = _membership_id(nome, party, uf, affiliation_date)
 
@@ -106,12 +107,15 @@ class TseFiliadosPipeline(Pipeline):
                 "affiliation_date": affiliation_date,
                 "status": status,
                 "municipality_id": municipality_id,
+                "birth_date": birth_date,
                 "source": "tse_filiados",
             })
 
             person_rels.append({
                 "source_name": nome,
                 "source_uf": uf,
+                "source_birth_date": birth_date,
+                "source_municipality_id": municipality_id,
                 "target_key": mid,
                 "party": party,
                 "affiliation_date": affiliation_date,
@@ -136,17 +140,77 @@ class TseFiliadosPipeline(Pipeline):
             )
             logger.info("[tse_filiados] Loaded %d PartyMembership nodes", loaded)
 
-        if self.person_rels:
+        if not self.person_rels:
+            return
+
+        # Split rels by available matching fields for tiered confidence
+        tier_high: list[dict[str, Any]] = []    # name + UF + birth_date
+        tier_medium: list[dict[str, Any]] = []   # name + UF + municipality
+        tier_low: list[dict[str, Any]] = []      # name + UF only
+
+        for rel in self.person_rels:
+            has_birth = bool(rel["source_birth_date"])
+            has_muni = bool(rel["source_municipality_id"])
+            if has_birth:
+                tier_high.append(rel)
+            elif has_muni:
+                tier_medium.append(rel)
+            else:
+                tier_low.append(rel)
+
+        logger.info(
+            "[tse_filiados] Tiered matching: %d high, %d medium, %d low",
+            len(tier_high), len(tier_medium), len(tier_low),
+        )
+
+        # Tier 1 (high): name + UF + birth_date
+        if tier_high:
             query = (
                 "UNWIND $rows AS row "
                 "MATCH (p:Person) "
                 "WHERE p.name = row.source_name AND p.uf = row.source_uf "
+                "  AND p.birth_date = row.source_birth_date "
                 "MATCH (m:PartyMembership {membership_id: row.target_key}) "
                 "MERGE (p)-[r:FILIADO_A]->(m) "
                 "SET r.party = row.party, "
                 "    r.affiliation_date = row.affiliation_date, "
                 "    r.status = row.status, "
-                "    r.match_method = 'name_uf_exact'"
+                "    r.match_confidence = 'high'"
             )
-            loaded = loader.run_query_with_retry(query, self.person_rels)
-            logger.info("[tse_filiados] Loaded %d FILIADO_A relationships", loaded)
+            loaded = loader.run_query_with_retry(query, tier_high)
+            logger.info("[tse_filiados] High-confidence FILIADO_A: %d", loaded)
+
+        # Tier 2 (medium): name + UF + municipality
+        if tier_medium:
+            query = (
+                "UNWIND $rows AS row "
+                "MATCH (p:Person) "
+                "WHERE p.name = row.source_name AND p.uf = row.source_uf "
+                "  AND p.municipality_id = row.source_municipality_id "
+                "MATCH (m:PartyMembership {membership_id: row.target_key}) "
+                "WHERE NOT (p)-[:FILIADO_A]->(m) "
+                "MERGE (p)-[r:FILIADO_A]->(m) "
+                "SET r.party = row.party, "
+                "    r.affiliation_date = row.affiliation_date, "
+                "    r.status = row.status, "
+                "    r.match_confidence = 'medium'"
+            )
+            loaded = loader.run_query_with_retry(query, tier_medium)
+            logger.info("[tse_filiados] Medium-confidence FILIADO_A: %d", loaded)
+
+        # Tier 3 (low): name + UF only
+        if tier_low:
+            query = (
+                "UNWIND $rows AS row "
+                "MATCH (p:Person) "
+                "WHERE p.name = row.source_name AND p.uf = row.source_uf "
+                "MATCH (m:PartyMembership {membership_id: row.target_key}) "
+                "WHERE NOT (p)-[:FILIADO_A]->(m) "
+                "MERGE (p)-[r:FILIADO_A]->(m) "
+                "SET r.party = row.party, "
+                "    r.affiliation_date = row.affiliation_date, "
+                "    r.status = row.status, "
+                "    r.match_confidence = 'low'"
+            )
+            loaded = loader.run_query_with_retry(query, tier_low)
+            logger.info("[tse_filiados] Low-confidence FILIADO_A: %d", loaded)

@@ -38,6 +38,8 @@ COLUMNS = [
     "data_cancelamento",
     "data_regularizacao",
     "motivo_cancelamento",
+    "data_nascimento",
+    "numero_inscricao",
 ]
 
 PAGE_SIZE = 100_000

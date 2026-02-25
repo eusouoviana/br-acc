@@ -117,6 +117,9 @@ CREATE CONSTRAINT cpi_id_unique IF NOT EXISTS
 CREATE INDEX person_name IF NOT EXISTS
   FOR (p:Person) ON (p.name);
 
+CREATE INDEX person_name_uf IF NOT EXISTS
+  FOR (p:Person) ON (p.name, p.uf);
+
 CREATE INDEX person_author_key IF NOT EXISTS
   FOR (p:Person) ON (p.author_key);
 

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Download DOU (Diario Oficial da Uniao) acts from Imprensa Nacional.
+"""Download DOU (Diario Oficial da Uniao) from Imprensa Nacional XML dumps.
 
-Uses the IN search API to download structured gazette act data.
-Saves JSON files per date in data/dou/.
+Uses the official open data XML distribution from dadosabertos-download.cgu.gov.br.
+Each month has 3 ZIP files (one per DOU section), each containing XML articles.
+
+URL pattern: https://dadosabertos-download.cgu.gov.br/inlabs/{AAMM}/S0{section}{AAMM}.zip
 
 Usage:
     python etl/scripts/download_dou.py
-    python etl/scripts/download_dou.py --start-date 2024-01-01 --end-date 2024-01-31
-    python etl/scripts/download_dou.py --days 7
-    python etl/scripts/download_dou.py --output-dir ./data/dou --delay 2.0
+    python etl/scripts/download_dou.py --start-month 2024-01 --end-month 2024-12
+    python etl/scripts/download_dou.py --skip-existing --output-dir ./data/dou
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
-import time
-from datetime import datetime, timedelta
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import click
@@ -28,234 +28,131 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Imprensa Nacional search API
-SEARCH_URL = "https://www.in.gov.br/consulta/-/buscar/dou"
-
-# Default page size (max the API accepts)
-PAGE_SIZE = 20
-
-# User-Agent to reduce bot detection
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-}
+BASE_URL = "https://dadosabertos-download.cgu.gov.br/inlabs"
+SECTIONS = [1, 2, 3]
+TIMEOUT = 120
 
 
-def _fetch_page(
+def _month_range(start: str, end: str) -> list[str]:
+    """Generate AAMM strings from YYYY-MM to YYYY-MM inclusive."""
+    sy, sm = start.split("-")
+    ey, em = end.split("-")
+    year, month = int(sy), int(sm)
+    end_year, end_month = int(ey), int(em)
+
+    months: list[str] = []
+    while (year, month) <= (end_year, end_month):
+        # AAMM format: last 2 digits of year + 2-digit month
+        aamm = f"{year % 100:02d}{month:02d}"
+        months.append(aamm)
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return months
+
+
+def _download_zip(
     client: httpx.Client,
-    date_str: str,
-    page: int,
-    *,
-    timeout: int,
-) -> list[dict] | None:
-    """Fetch one page of DOU results for a given date.
-
-    Args:
-        client: HTTP client instance.
-        date_str: Date in DD-MM-YYYY format.
-        page: Zero-indexed page number.
-        timeout: Request timeout in seconds.
-
-    Returns:
-        List of act dicts, or None on failure.
-    """
-    params = {
-        "q": "*",
-        "exactDate": date_str,
-        "sortBy": "publicacao",
-        "s": "desc",
-        "delta": str(PAGE_SIZE),
-        "currentPage": str(page),
-    }
-
-    try:
-        response = client.get(SEARCH_URL, params=params, timeout=timeout)
-        response.raise_for_status()
-
-        data = response.json()
-
-        # The API returns a wrapper with jsonArray
-        if isinstance(data, dict) and "jsonArray" in data:
-            return data["jsonArray"]
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            # Sometimes the response has items nested differently
-            for key in ("items", "results", "content"):
-                if key in data and isinstance(data[key], list):
-                    return data[key]
-        logger.warning("Unexpected response format for %s page %d", date_str, page)
-        return []
-
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 403:
-            logger.warning(
-                "Access blocked (403) for %s page %d — API may be rate-limiting",
-                date_str,
-                page,
-            )
-        else:
-            logger.warning("HTTP %d for %s page %d", e.response.status_code, date_str, page)
-        return None
-
-    except (httpx.RequestError, json.JSONDecodeError) as e:
-        logger.warning("Request failed for %s page %d: %s", date_str, page, e)
-        return None
-
-
-def _download_date(
-    client: httpx.Client,
-    target_date: datetime,
+    aamm: str,
+    section: int,
     output_dir: Path,
     *,
     skip_existing: bool,
-    max_pages: int,
-    timeout: int,
-    delay: float,
 ) -> int:
-    """Download all acts for a single date.
+    """Download and extract one section ZIP. Returns number of XML files extracted."""
+    zip_name = f"S0{section}{aamm}.zip"
+    url = f"{BASE_URL}/{aamm}/{zip_name}"
 
-    Returns:
-        Number of acts downloaded.
-    """
-    date_str = target_date.strftime("%d-%m-%Y")
-    file_date = target_date.strftime("%Y%m%d")
-    output_path = output_dir / f"dou_{file_date}.json"
-
-    if skip_existing and output_path.exists():
-        logger.info("Skipping %s (exists)", output_path.name)
+    # Check if already extracted
+    section_dir = output_dir / f"S{section}" / aamm
+    marker = section_dir / ".done"
+    if skip_existing and marker.exists():
+        logger.info("Skipping %s (already extracted)", zip_name)
         return 0
 
-    all_acts: list[dict] = []
-    page = 0
-    blocked = False
+    logger.info("Downloading %s", url)
+    try:
+        resp = client.get(url, timeout=TIMEOUT)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning("Not found: %s (month may not be available yet)", zip_name)
+        else:
+            logger.warning("HTTP %d for %s", e.response.status_code, zip_name)
+        return 0
+    except httpx.RequestError as e:
+        logger.warning("Request failed for %s: %s", zip_name, e)
+        return 0
 
-    while page < max_pages:
-        acts = _fetch_page(client, date_str, page, timeout=timeout)
+    section_dir.mkdir(parents=True, exist_ok=True)
+    xml_count = 0
 
-        if acts is None:
-            blocked = True
-            break
+    try:
+        with zipfile.ZipFile(BytesIO(resp.content)) as zf:
+            for member in zf.namelist():
+                if member.lower().endswith(".xml"):
+                    zf.extract(member, section_dir)
+                    xml_count += 1
+    except zipfile.BadZipFile:
+        logger.warning("Bad ZIP file: %s", zip_name)
+        return 0
 
-        if not acts:
-            break
+    if xml_count > 0:
+        marker.write_text(str(xml_count))
+        logger.info("Extracted %d XML files from %s", xml_count, zip_name)
 
-        all_acts.extend(acts)
-        logger.info(
-            "  %s page %d: %d acts (total: %d)",
-            date_str, page, len(acts), len(all_acts),
-        )
-
-        if len(acts) < PAGE_SIZE:
-            break
-
-        page += 1
-        if delay > 0:
-            time.sleep(delay)
-
-    if all_acts:
-        output_path.write_text(
-            json.dumps(all_acts, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        logger.info("Saved %d acts to %s", len(all_acts), output_path.name)
-    elif blocked:
-        logger.warning("No data saved for %s (blocked)", date_str)
-    else:
-        logger.info("No acts published on %s", date_str)
-
-    return len(all_acts)
+    return xml_count
 
 
 @click.command()
 @click.option(
-    "--start-date",
-    default=None,
-    help="Start date (YYYY-MM-DD). Defaults to --days ago.",
+    "--start-month",
+    default="2024-01",
+    help="Start month (YYYY-MM)",
 )
 @click.option(
-    "--end-date",
-    default=None,
-    help="End date (YYYY-MM-DD). Defaults to today.",
+    "--end-month",
+    default="2025-02",
+    help="End month (YYYY-MM)",
 )
-@click.option("--days", type=int, default=30, help="Days back from today (if no start-date)")
 @click.option("--output-dir", default="./data/dou", help="Output directory")
-@click.option("--skip-existing/--no-skip-existing", default=True, help="Skip existing files")
-@click.option("--max-pages", type=int, default=50, help="Max pages per date")
-@click.option("--timeout", type=int, default=30, help="Request timeout in seconds")
-@click.option("--delay", type=float, default=1.0, help="Delay between requests in seconds")
+@click.option("--skip-existing/--no-skip-existing", default=True)
 def main(
-    start_date: str | None,
-    end_date: str | None,
-    days: int,
+    start_month: str,
+    end_month: str,
     output_dir: str,
     skip_existing: bool,
-    max_pages: int,
-    timeout: int,
-    delay: float,
 ) -> None:
-    """Download DOU acts from Imprensa Nacional search API."""
+    """Download DOU XML dumps from Imprensa Nacional open data."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    end = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
-    start = (
-        datetime.strptime(start_date, "%Y-%m-%d")
-        if start_date
-        else end - timedelta(days=days)
-    )
-
-    logger.info("=== DOU Download ===")
-    logger.info("Date range: %s to %s", start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+    months = _month_range(start_month, end_month)
+    logger.info("=== DOU XML Download ===")
+    logger.info("Months: %s to %s (%d months)", start_month, end_month, len(months))
     logger.info("Output: %s", out.resolve())
 
-    total_acts = 0
-    total_days = 0
-    blocked_days = 0
+    total_xml = 0
+    total_zips = 0
 
-    with httpx.Client(headers=HEADERS, follow_redirects=True) as client:
-        current = start
-        while current <= end:
-            # Skip weekends (no DOU published)
-            if current.weekday() >= 5:
-                current += timedelta(days=1)
-                continue
-
-            count = _download_date(
-                client,
-                current,
-                out,
-                skip_existing=skip_existing,
-                max_pages=max_pages,
-                timeout=timeout,
-                delay=delay,
-            )
-            total_acts += count
-            total_days += 1
-
-            if count == 0 and not skip_existing:
-                blocked_days += 1
-
-            # Delay between dates
-            if delay > 0:
-                time.sleep(delay)
-
-            current += timedelta(days=1)
+    with httpx.Client(follow_redirects=True) as client:
+        for aamm in months:
+            for section in SECTIONS:
+                count = _download_zip(
+                    client, aamm, section, out, skip_existing=skip_existing,
+                )
+                total_xml += count
+                if count > 0:
+                    total_zips += 1
 
     logger.info("=== Done ===")
-    logger.info(
-        "Downloaded %d acts across %d days (%d days with no data)",
-        total_acts, total_days, blocked_days,
-    )
+    logger.info("Downloaded %d ZIPs, extracted %d XML files", total_zips, total_xml)
 
-    if blocked_days > total_days * 0.5:
+    if total_xml == 0:
         logger.warning(
-            "More than half the days returned no data — API may be blocking requests. "
-            "Try increasing --delay or using a browser to download manually."
+            "No XML files extracted. The URL pattern may have changed. "
+            "Check https://dadosabertos-download.cgu.gov.br/inlabs/ manually."
         )
         sys.exit(1)
 

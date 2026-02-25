@@ -4,8 +4,8 @@ Ingests structured act data from the official Imprensa Nacional portal
 (in.gov.br). Creates DOUAct nodes linked to Person (by CPF) via PUBLICOU
 and to Company (by CNPJ) via MENCIONOU.
 
-Data source: Imprensa Nacional search API or pre-downloaded JSON files
-in data/dou/. See scripts/download_dou.py for acquisition.
+Data source: Imprensa Nacional XML dumps (preferred) or pre-downloaded
+JSON files in data/dou/. See scripts/download_dou.py for acquisition.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import logging
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from xml.etree import ElementTree
 
 from icarus_etl.base import Pipeline
 from icarus_etl.loader import Neo4jBatchLoader
@@ -152,16 +153,82 @@ class DouPipeline(Pipeline):
             msg = f"DOU data directory not found at {dou_dir}"
             raise FileNotFoundError(msg)
 
+        # Try XML files first (Imprensa Nacional dumps), then JSON (legacy)
+        xml_files = sorted(dou_dir.rglob("*.xml"))
         json_files = sorted(dou_dir.glob("*.json"))
-        if not json_files:
-            logger.warning("[dou] No JSON files found in %s", dou_dir)
+
+        if xml_files:
+            self._extract_xml(xml_files)
+        elif json_files:
+            self._extract_json(json_files)
+        else:
+            logger.warning("[dou] No XML or JSON files found in %s", dou_dir)
             return
 
+        logger.info("[dou] Extracted %d act records", len(self._raw_acts))
+
+    def _extract_xml(self, xml_files: list[Path]) -> None:
+        """Extract acts from Imprensa Nacional XML dumps."""
+        for f in xml_files:
+            try:
+                tree = ElementTree.parse(f)  # noqa: S314
+            except ElementTree.ParseError:
+                logger.warning("[dou] Failed to parse XML: %s", f.name)
+                continue
+
+            root = tree.getroot()
+
+            # Handle both <article> elements and <xml><article> wrappers
+            articles = root.findall(".//article")
+            if not articles:
+                articles = [root] if root.tag == "article" else []
+
+            for article in articles:
+                identifica = article.find(".//identifica")
+                texto = article.find(".//Texto")
+                if texto is None:
+                    texto = article.find(".//texto")
+                date_el = identifica.find("data") if identifica is not None else None
+                orgao_el = identifica.find("orgao") if identifica is not None else None
+                titulo_el = identifica.find("titulo") if identifica is not None else None
+                secao_el = identifica.find("secao") if identifica is not None else None
+
+                title = (titulo_el.text or "").strip() if titulo_el is not None else ""
+                pub_date = (date_el.text or "").strip() if date_el is not None else ""
+                agency = (orgao_el.text or "").strip() if orgao_el is not None else ""
+                section = (secao_el.text or "").strip() if secao_el is not None else ""
+
+                # Collect all text from Texto element
+                abstract = ""
+                if texto is not None:
+                    abstract = " ".join(
+                        (p.text or "").strip()
+                        for p in texto.iter()
+                        if p.text and p.text.strip()
+                    )
+
+                # Use article id or generate from title+date
+                art_id = article.get("id", "") or article.get("artType", "")
+
+                self._raw_acts.append({
+                    "urlTitle": art_id,
+                    "title": title,
+                    "abstract": abstract[:2000],
+                    "pubDate": pub_date,
+                    "pubName": f"DO{section}" if section else "",
+                    "artCategory": article.get("artCategory", ""),
+                    "hierarchyStr": agency,
+                })
+
+                if self.limit and len(self._raw_acts) >= self.limit:
+                    return
+
+    def _extract_json(self, json_files: list[Path]) -> None:
+        """Extract acts from legacy JSON format (IN search API)."""
         for f in json_files:
             with open(f, encoding="utf-8") as fh:
                 data = json.load(fh)
 
-            # Handle IN API response (list of acts) or wrapper format
             if isinstance(data, dict) and "jsonArray" in data:
                 items = data["jsonArray"]
             elif isinstance(data, list):
@@ -182,12 +249,7 @@ class DouPipeline(Pipeline):
                 })
 
                 if self.limit and len(self._raw_acts) >= self.limit:
-                    break
-
-            if self.limit and len(self._raw_acts) >= self.limit:
-                break
-
-        logger.info("[dou] Extracted %d act records", len(self._raw_acts))
+                    return
 
     def transform(self) -> None:
         acts: list[dict[str, Any]] = []

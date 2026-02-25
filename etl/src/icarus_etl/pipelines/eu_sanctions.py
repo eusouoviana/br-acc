@@ -28,7 +28,7 @@ VALID_EU_TYPES = {EU_TYPE_PERSON, EU_TYPE_ENTERPRISE}
 MATCH_PERSON_QUERY = """
 UNWIND $rows AS row
 MATCH (p:Person)
-WHERE p.nome = row.name
+WHERE p.name = row.name
 MERGE (p)-[:SANCIONADA_INTERNACIONALMENTE]->(s:InternationalSanction {sanction_id: row.sanction_id})
 """
 

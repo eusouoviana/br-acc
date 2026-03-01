@@ -71,3 +71,16 @@ jobs:
 
       - name: Audit ETL dependencies
         run: uvx pip-audit -r /tmp/etl-requirements.txt --strict
+
+  public-privacy-gate:
+    name: Public Privacy Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate public privacy contract
+        run: python scripts/check_public_privacy.py --repo-root .

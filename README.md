@@ -1,23 +1,29 @@
-# ICARUS
+# World Transparency Graph (WTG) — Icarus Core
 
-Ferramenta de análise de grafos de dados públicos brasileiros.
+Plataforma global de análise de grafos de dados públicos.
 
-Brazilian public data graph analysis tool.
+Global public-data graph analysis platform.
 
-[![CI](https://github.com/YOUR_ORG/icarus/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/icarus/actions/workflows/ci.yml)
+[![CI](https://github.com/brunoclz/world-transparency-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/brunoclz/world-transparency-graph/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 ---
 
 ## O que é / What it is
 
-ICARUS ingere dados de registros públicos brasileiros (CNPJ, TSE, Portal da Transparência, CEIS/CNEP) em um grafo Neo4j e permite a exploração visual de conexões entre pessoas, empresas, contratos, eleições e sanções.
+WTG (powered by Icarus Core) ingere dados de registros públicos e permite a exploração visual de conexões entre empresas, contratos, eleições e sanções.
 
-ICARUS ingests Brazilian public records (CNPJ, TSE, Portal da Transparência, CEIS/CNEP) into a Neo4j graph and enables visual exploration of connections between people, companies, contracts, elections, and sanctions.
+WTG (powered by Icarus Core) ingests public records and enables visual exploration of connections between companies, contracts, elections, and sanctions.
 
 **Dados de registros públicos. Não constitui acusação.**
 
 **Data patterns from public records. Not accusations.**
+
+## Modelo de marca / Brand model
+
+- Produto público: **World Transparency Graph (WTG)**
+- Movimento cívico: **BRCC**
+- Engine institucional: **Icarus Core**
 
 ## Arquitetura / Architecture
 
@@ -105,21 +111,33 @@ make test-frontend # 20 testes TypeScript
 | p10 | Ciclo doação-contrato | Donation-contract loop |
 | p12 | Concentração de contratos | Contract concentration |
 
+## Public mode contract
+
+WTG Open deve rodar com defaults públicos:
+
+- `PUBLIC_MODE=true`
+- `PUBLIC_ALLOW_PERSON=false`
+- `PUBLIC_ALLOW_ENTITY_LOOKUP=false`
+- `PUBLIC_ALLOW_INVESTIGATIONS=false`
+
+Com isso, o modo público não retorna nós de PF (`Person`/`Partner`) nem propriedades pessoais.
+
 ## Endpoints da API / API endpoints
 
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Health check |
-| GET | `/api/v1/entity/{cpf_or_cnpj}` | Buscar entidade |
-| GET | `/api/v1/entity/{id}/connections` | Conexões da entidade |
-| GET | `/api/v1/search?q=` | Busca fulltext |
-| GET | `/api/v1/graph/{entity_id}` | Dados do grafo |
-| GET | `/api/v1/patterns/` | Listar padrões |
-| GET | `/api/v1/patterns/{entity_id}` | Padrões da entidade |
-| GET | `/api/v1/baseline/{entity_id}` | Comparação com pares |
-| POST | `/api/v1/investigations/` | Criar investigação |
-| GET | `/api/v1/investigations/` | Listar investigações |
-| GET | `/api/v1/meta/sources` | Fontes de dados |
+| GET | `/api/v1/public/meta` | Métricas agregadas e saúde de fontes |
+| GET | `/api/v1/public/patterns/company/{cnpj_or_id}` | Sinais públicos por empresa |
+| GET | `/api/v1/public/graph/company/{cnpj_or_id}` | Subgrafo público de empresa |
+
+### Advanced-only surface (internal deployment)
+
+- `/api/v1/entity/*`
+- `/api/v1/search`
+- `/api/v1/graph/*`
+- `/api/v1/patterns/*`
+- `/api/v1/investigations/*`
 
 ## Estrutura / Project structure
 

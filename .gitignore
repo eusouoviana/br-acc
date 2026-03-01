@@ -50,6 +50,7 @@ htmlcov/
 # Data files (too large for git)
 *.csv
 !docs/source_registry_br_v1.csv
+!docs/release/public_boundary_matrix.csv
 *.tsv
 *.parquet
 *.dbc

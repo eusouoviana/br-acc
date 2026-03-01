@@ -1,0 +1,19 @@
+path,classification,reason,action_for_public_repo
+api/**,PUBLIC,Core API code is required for public edition,include
+etl/**,PUBLIC,Core ingestion framework is required for public edition,include
+frontend/**,PUBLIC,Public demo UI is required,include
+infra/**,PUBLIC with review,Keep only generic local/dev deployment docs,include reviewed subset
+docs/brand/**,PUBLIC,Brand governance for release,include
+docs/demo/**,PUBLIC,Demo dataset contract and constraints,include
+docs/legal/**,PUBLIC,Compliance and responsible-use baseline,include
+docs/source_registry_br_v1.csv,PUBLIC,Program governance and transparency,include
+docs/data-sources.md,PUBLIC,Source catalog visibility,include
+CLAUDE.md,REMOVE_FROM_PUBLIC,Contains operational host and infrastructure paths,exclude
+.mcp.json,REMOVE_FROM_PUBLIC,Contains local runtime MCP wiring,exclude
+scripts/auto_finalize_pncp_backfill.sh,REMOVE_FROM_PUBLIC,Production operational finalizer tied to server paths,exclude
+scripts/storage_capacity_report.sh,INTERNAL,Operational script with server assumptions,exclude by default
+docs/shadow_rollout_runbook.md,REMOVE_FROM_PUBLIC,Operational production rollout details,exclude
+docs/ingestion_priority_runbook.md,REMOVE_FROM_PUBLIC,Contains production data paths and credential procedures,exclude
+docs/ops/storage_operations.md,REMOVE_FROM_PUBLIC,Contains production operational process and server paths,exclude
+audit-results/**,REMOVE_FROM_PUBLIC,Operational evidence and internal logs,exclude
+data/**,INTERNAL by default,Only data/demo synthetic subset allowed,include only data/demo

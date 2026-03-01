@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from importlib import import_module
 import re
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Mapping, Protocol, cast
 
 from fastapi import HTTPException
 
@@ -21,6 +22,24 @@ COMMUNITY_PATTERN_IDS = (
 )
 
 _CNPJ_PATTERN = re.compile(r"^\d{14}$")
+
+_PatternRunner = Callable[..., Awaitable[list[PatternResult]]]
+_ComputeExposure = Callable[[Any, str], Awaitable[ExposureResponse]]
+
+
+def _load_pattern_queries() -> Mapping[str, str]:
+    module = import_module("icarus.services.pattern_service")
+    return cast(Mapping[str, str], getattr(module, "PATTERN_QUERIES"))
+
+
+def _load_pattern_runner(name: str) -> _PatternRunner:
+    module = import_module("icarus.services.pattern_service")
+    return cast(_PatternRunner, getattr(module, name))
+
+
+def _load_compute_exposure() -> _ComputeExposure:
+    module = import_module("icarus.services.score_service")
+    return cast(_ComputeExposure, getattr(module, "compute_exposure"))
 
 
 class IntelligenceProvider(Protocol):
@@ -238,8 +257,7 @@ class AdvancedIntelligenceProvider:
     tier = "advanced"
 
     def list_patterns(self) -> list[dict[str, str]]:
-        from icarus.services.pattern_service import PATTERN_QUERIES
-        return _build_pattern_meta(tuple(PATTERN_QUERIES.keys()))
+        return _build_pattern_meta(tuple(_load_pattern_queries().keys()))
 
     async def run_all_patterns(
         self,
@@ -248,8 +266,7 @@ class AdvancedIntelligenceProvider:
         lang: str = "pt",
         include_probable: bool = False,
     ) -> list[PatternResult]:
-        from icarus.services.pattern_service import run_all_patterns
-
+        run_all_patterns = _load_pattern_runner("run_all_patterns")
         results = await run_all_patterns(
             driver,
             entity_id=entity_id,
@@ -268,8 +285,7 @@ class AdvancedIntelligenceProvider:
         lang: str = "pt",
         include_probable: bool = False,
     ) -> list[PatternResult]:
-        from icarus.services.pattern_service import run_pattern
-
+        run_pattern = _load_pattern_runner("run_pattern")
         results = await run_pattern(
             session,
             pattern_id=pattern_id,
@@ -286,8 +302,7 @@ class AdvancedIntelligenceProvider:
         session: AsyncSession,
         entity_id: str,
     ) -> ExposureResponse:
-        from icarus.services.score_service import compute_exposure
-
+        compute_exposure = _load_compute_exposure()
         result = await compute_exposure(session, entity_id)
         result.intelligence_tier = self.tier
         return result

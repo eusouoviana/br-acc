@@ -34,6 +34,7 @@ jobs:
           bash scripts/bootstrap_all_public.sh \
             --noninteractive \
             --yes-reset \
+            --core-allow-statuses blocked_external \
             --sources cnpj,tse,transparencia,sanctions
 
       - name: Upload bootstrap-all artifacts

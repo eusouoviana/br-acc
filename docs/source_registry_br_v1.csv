@@ -26,15 +26,15 @@ cepim,CEPIM barred NGOs,integrity,P1,loaded,implemented,loaded,monthly,true,http
 cpgf,CPGF gov card expenses,spending,P2,loaded,implemented,loaded,monthly,true,https://portaldatransparencia.gov.br/download-de-dados/cpgf,cpgf,Agent H,file,Masked CPF source,,monitored,,,,healthy
 leniency,Acordos de leniencia,integrity,P0,loaded,implemented,loaded,monthly,true,https://portaldatransparencia.gov.br/download-de-dados/acordos-leniencia,leniency,Agent A,file,High signal low volume,,monitored,,,,healthy
 ofac,OFAC sanctions,sanctions,P1,loaded,implemented,loaded,monthly,true,https://home.treasury.gov/policy-issues/financial-sanctions/sdn-list-data-files,ofac,Agent G,file,International sanctions,,monitored,,,,healthy
-holdings,Brasil IO holdings,ownership,P1,loaded,implemented,loaded,monthly,true,https://brasil.io/dataset/socios-brasil/holding/,holdings,Agent G,file,Ownership enrichment,,monitored,,,,healthy
+holdings,Brasil IO holdings,ownership,P1,loaded,implemented,loaded,monthly,true,https://brasil.io/dataset/socios-brasil/holdings/,holdings,Agent G,file,Ownership enrichment,,monitored,,,,healthy
 viagens,Viagens a servico,spending,P2,loaded,implemented,loaded,monthly,true,https://portaldatransparencia.gov.br/download-de-dados/viagens,viagens,Agent H,file,Travel spend baseline,,monitored,,,,healthy
 siop,SIOP emendas,budget,P0,partial,implemented,partial,annual,true,https://www.siop.planejamento.gov.br/,siop,Agent C,api,Author linkage limited,,monitored,,,,partial
-pncp,PNCP bids and contracts,contracts,P0,stale,implemented,partial,monthly,true,https://pncp.gov.br/api/consulta/v1/,pncp,Agent C,api,Freshness SLA pending,,monitored,,,,stale
+pncp,PNCP bids and contracts,contracts,P0,stale,implemented,partial,monthly,true,https://pncp.gov.br/app/editais,pncp,Agent C,api,Freshness SLA pending,,monitored,,,,stale
 renuncias,Renuncias fiscais,fiscal,P1,loaded,implemented,loaded,annual,true,https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/dados-abertos,renuncias,Agent G,file,Tax waiver baseline,,monitored,,,,healthy
 siconfi,SICONFI municipal finance,fiscal,P1,partial,implemented,partial,annual,true,https://apidatalake.tesouro.gov.br/docs/siconfi/,siconfi,Agent C,api,No CNPJ direct links,,monitored,,,,partial
-tse_bens,TSE candidate assets,electoral,P1,loaded,implemented,loaded,biennial,true,https://dadosabertos.tse.jus.br/dataset/bens-candidato,tse_bens,Agent E,file,Patrimony baseline,,monitored,,,,healthy
-tse_filiados,TSE party memberships,electoral,P1,loaded,implemented,loaded,monthly,true,https://dadosabertos.tse.jus.br/dataset/filiados-partidos,tse_filiados,Agent E,file,Party network,,monitored,,,,healthy
-bcb,BCB penalties,finance,P1,loaded,implemented,loaded,monthly,true,https://dadosabertos.bcb.gov.br/dataset/penalidades,bcb,Agent G,file,Bank penalties loaded,,monitored,,,,healthy
+tse_bens,TSE candidate assets,electoral,P1,loaded,implemented,loaded,biennial,true,https://dadosabertos.tse.jus.br/dataset/candidatos-2024,tse_bens,Agent E,file,Patrimony baseline,,monitored,,,,healthy
+tse_filiados,TSE party memberships,electoral,P1,loaded,implemented,loaded,monthly,true,https://dadosabertos.tse.jus.br/dataset/delegados-partidarios,tse_filiados,Agent E,file,Party network,,monitored,,,,healthy
+bcb,BCB penalties,finance,P1,loaded,implemented,loaded,monthly,true,https://dadosabertos.bcb.gov.br/dataset/processo-administrativo-sancionador---penalidades-aplicadas,bcb,Agent G,file,Bank penalties loaded,,monitored,,,,healthy
 stf,STF court data,judiciary,P1,loaded,implemented,loaded,monthly,true,https://basedosdados.org/dataset/br-stf-corte-aberta,stf,Agent D,bigquery,Supreme court coverage,,monitored,,,,healthy
 caged,CAGED labor movements,labor,P1,stale,implemented,partial,monthly,true,https://ftp.mtps.gov.br/pdet/microdados/NOVO%20CAGED/,caged,Agent H,file,Aggregate-only implementation,,monitored,,,,stale
 eu_sanctions,EU sanctions,sanctions,P1,loaded,implemented,loaded,monthly,true,https://data.europa.eu/data/datasets/consolidated-list-of-persons-groups-and-entities-subject-to-eu-financial-sanctions,eu_sanctions,Agent G,file,International sanctions,,monitored,,,,healthy

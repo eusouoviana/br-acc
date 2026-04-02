@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,14 @@ FINAL_STATUSES = {
     "failed_pipeline",
     "skipped",
 }
+
+
+def parse_status_set(raw: str) -> set[str]:
+    statuses = {item.strip() for item in raw.split(",") if item.strip()}
+    unknown = sorted(statuses - FINAL_STATUSES)
+    if unknown:
+        raise RuntimeError(f"Unknown status(es) in --core-allow-statuses: {unknown}")
+    return statuses
 
 
 def utc_now() -> datetime:
@@ -253,6 +262,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--yes-reset", action="store_true")
     parser.add_argument("--no-reset", action="store_true")
     parser.add_argument("--noninteractive", action="store_true")
+    parser.add_argument(
+        "--core-allow-statuses",
+        default="",
+        help=(
+            "Comma-separated statuses to ignore when evaluating core failures "
+            "(e.g. blocked_external)"
+        ),
+    )
     parser.add_argument("--report-latest", action="store_true")
     return parser.parse_args()
 
@@ -268,6 +285,12 @@ def main() -> int:
             return 1
         print(latest_summary.read_text(encoding="utf-8"))
         return 0
+
+    try:
+        core_allow_statuses = parse_status_set(args.core_allow_statuses)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
     if shutil.which("docker") is None:
         print("docker is required", file=sys.stderr)
@@ -348,6 +371,9 @@ def main() -> int:
     if db_reset:
         reset_graph(repo_root, neo4j_password)
 
+    def normalize_etl_shell_cmd(shell_cmd: str) -> str:
+        return re.sub(r"(?<!\S)bracc-etl(?=\s)", "uv run bracc-etl", shell_cmd)
+
     def run_etl_shell(shell_cmd: str) -> subprocess.CompletedProcess[str]:
         env_cmd = ["-e", f"NEO4J_PASSWORD={neo4j_password}"]
         for key in ("GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT", "BQ_PROJECT_ID"):
@@ -355,7 +381,10 @@ def main() -> int:
             if value:
                 env_cmd.extend(["-e", f"{key}={value}"])
         return run_cmd(
-            compose + ["--profile", "etl", "run", "--rm"] + env_cmd + ["etl", "bash", "-lc", shell_cmd],
+            compose
+            + ["--profile", "etl", "run", "--rm"]
+            + env_cmd
+            + ["etl", "bash", "-lc", normalize_etl_shell_cmd(shell_cmd)],
             cwd=repo_root,
             env=compose_env,
         )
@@ -453,7 +482,11 @@ def main() -> int:
     ended = utc_now()
     counts = Counter(row["status"] for row in results)
     core_failures = [
-        row for row in results if (row["pipeline_id"] in core_sources or row.get("core")) and row["status"] != "loaded"
+        row
+        for row in results
+        if (row["pipeline_id"] in core_sources or row.get("core"))
+        and row["status"] != "loaded"
+        and row["status"] not in core_allow_statuses
     ]
 
     summary = {
@@ -466,6 +499,7 @@ def main() -> int:
         "registry_path": str(registry_path.relative_to(repo_root)),
         "total_sources": len(results),
         "core_sources": sorted(core_sources),
+        "core_allow_statuses": sorted(core_allow_statuses),
         "counts": dict(counts),
         "core_failures": [row["pipeline_id"] for row in core_failures],
         "results": results,

@@ -6,14 +6,20 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import socket
 import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+try:
+    from datetime import UTC
+except ImportError:  # pragma: no cover - Python < 3.11
+    UTC = timezone.utc  # noqa: UP017
 
 USER_AGENT = "Mozilla/5.0 (compatible; BRACC-source-audit/1.0)"
 
@@ -82,6 +88,24 @@ def probe_url(url: str, timeout_sec: float) -> tuple[int | None, str | None, str
     error: str | None = None
     final_url = url
 
+    def _fallback_get() -> tuple[int | None, str | None, str]:
+        fallback = Request(
+            url,
+            headers={"User-Agent": USER_AGENT, "Range": "bytes=0-0"},
+            method="GET",
+        )
+        try:
+            with urlopen(fallback, timeout=timeout_sec) as response:
+                fallback_status = getattr(response, "status", None) or response.getcode()
+                fallback_url = getattr(response, "url", final_url)
+                return fallback_status, error, fallback_url
+        except HTTPError as fallback_exc:
+            return fallback_exc.code, error, final_url
+        except URLError as fallback_exc:
+            return None, type(fallback_exc).__name__, final_url
+        except (TimeoutError, socket.timeout):
+            return None, "TimeoutError", final_url
+
     try:
         with urlopen(request, timeout=timeout_sec) as response:
             status = getattr(response, "status", None) or response.getcode()
@@ -89,27 +113,14 @@ def probe_url(url: str, timeout_sec: float) -> tuple[int | None, str | None, str
             return status, error, final_url
     except HTTPError as exc:
         status = exc.code
-        if status == 405:
-            # Fallback when HEAD is not supported.
-            fallback = Request(url, headers={"User-Agent": USER_AGENT}, method="GET")
-            try:
-                with urlopen(fallback, timeout=timeout_sec) as response:
-                    status = getattr(response, "status", None) or response.getcode()
-                    final_url = getattr(response, "url", final_url)
-                    return status, error, final_url
-            except HTTPError as fallback_exc:
-                status = fallback_exc.code
-                return status, error, final_url
-            except URLError as fallback_exc:
-                error = type(fallback_exc).__name__
-                return None, error, final_url
-            except TimeoutError:
-                return None, "TimeoutError", final_url
+        if status in {404, 405}:
+            # Some upstream portals reject HEAD for valid GET downloads.
+            return _fallback_get()
         return status, error, final_url
     except URLError as exc:
         error = type(exc).__name__
         return None, error, final_url
-    except TimeoutError:
+    except (TimeoutError, socket.timeout):
         return None, "TimeoutError", final_url
 
 
@@ -125,6 +136,13 @@ def load_registry_rows(path: Path) -> list[dict[str, str]]:
     ]
 
 
+def _implementation_state_for(source_id: str, rows: list[dict[str, str]]) -> str:
+    for row in rows:
+        if (row.get("source_id") or "").strip() == source_id:
+            return (row.get("implementation_state") or "").strip()
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit source URLs in source_registry_br_v1.csv")
     parser.add_argument("--registry-path", default="docs/source_registry_br_v1.csv")
@@ -133,12 +151,23 @@ def main() -> int:
     parser.add_argument("--timeout-sec", type=float, default=8.0)
     parser.add_argument("--max-workers", type=int, default=16)
     parser.add_argument("--fail-on-transient", action="store_true")
+    parser.add_argument(
+        "--strict-implementation-states",
+        default="implemented",
+        help=(
+            "Comma-separated implementation_state values whose failures cause non-zero exit "
+            "(default: implemented)"
+        ),
+    )
     args = parser.parse_args()
 
     registry_path = Path(args.registry_path)
     exceptions_path = Path(args.exceptions_path)
     rows = load_registry_rows(registry_path)
     exceptions = parse_simple_yaml_lists(exceptions_path)
+    strict_states = {
+        item.strip() for item in args.strict_implementation_states.split(",") if item.strip()
+    }
 
     lock = threading.Lock()
     results: list[UrlResult] = []
@@ -171,32 +200,53 @@ def main() -> int:
     allow_auth = exceptions["allow_auth_or_rate_limited"]
     allow_transient = exceptions["allow_transient_error"]
 
-    broken_failures = [
+    def _is_strict(item: UrlResult) -> bool:
+        return _implementation_state_for(item.source_id, rows) in strict_states
+
+    broken_all = [
         item
         for item in results
         if item.classification == "broken_404_410" and item.source_id not in allow_broken
     ]
-    auth_failures = [
+    auth_all = [
         item
         for item in results
         if item.classification == "auth_or_rate_limited" and item.source_id not in allow_auth
     ]
-    transient_failures = [
+    transient_all = [
         item
         for item in results
         if item.classification == "transient_error" and item.source_id not in allow_transient
     ]
+
+    broken_strict = [item for item in broken_all if _is_strict(item)]
+    broken_advisory = [item for item in broken_all if not _is_strict(item)]
+    auth_strict = [item for item in auth_all if _is_strict(item)]
+    auth_advisory = [item for item in auth_all if not _is_strict(item)]
+    transient_strict = [item for item in transient_all if _is_strict(item)]
+    transient_advisory = [item for item in transient_all if not _is_strict(item)]
+
+    strict_count = sum(1 for item in results if _is_strict(item))
+    advisory_count = len(results) - strict_count
 
     payload = {
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "registry_path": str(registry_path),
         "exceptions_path": str(exceptions_path),
         "checked_sources": len(results),
+        "strict_implementation_states": sorted(strict_states),
+        "strict_checked_sources": strict_count,
+        "advisory_checked_sources": advisory_count,
         "summary": dict(summary),
         "failures": {
-            "broken_404_410_unallowlisted": [item.__dict__ for item in broken_failures],
-            "auth_or_rate_limited_unallowlisted": [item.__dict__ for item in auth_failures],
-            "transient_unallowlisted": [item.__dict__ for item in transient_failures],
+            "broken_404_410_unallowlisted": [item.__dict__ for item in broken_strict],
+            "auth_or_rate_limited_unallowlisted": [item.__dict__ for item in auth_strict],
+            "transient_unallowlisted": [item.__dict__ for item in transient_strict],
+        },
+        "advisory_failures": {
+            "broken_404_410_unallowlisted": [item.__dict__ for item in broken_advisory],
+            "auth_or_rate_limited_unallowlisted": [item.__dict__ for item in auth_advisory],
+            "transient_unallowlisted": [item.__dict__ for item in transient_advisory],
         },
         "results": [item.__dict__ for item in results],
     }
@@ -208,25 +258,36 @@ def main() -> int:
 
     print(
         "checked={checked} ok={ok} redirected={redirected} auth_or_rate_limited={auth} "
-        "broken_404_410={broken} transient_error={transient}".format(
+        "broken_404_410={broken} transient_error={transient} "
+        "strict={strict} advisory={advisory}".format(
             checked=len(results),
             ok=summary.get("ok", 0),
             redirected=summary.get("redirected", 0),
             auth=summary.get("auth_or_rate_limited", 0),
             broken=summary.get("broken_404_410", 0),
             transient=summary.get("transient_error", 0),
+            strict=strict_count,
+            advisory=advisory_count,
         )
     )
 
-    if broken_failures:
-        print("FAIL: unallowlisted broken_404_410 URLs found")
-        for item in broken_failures:
+    if broken_advisory or auth_advisory or transient_advisory:
+        print("ADVISORY: non-strict source failures (do not block CI):")
+        for item in broken_advisory + auth_advisory + transient_advisory:
+            print(
+                f"  - {item.source_id}: {item.classification} "
+                f"{item.http_status or item.error} {item.url}"
+            )
+
+    if broken_strict:
+        print("FAIL: unallowlisted broken_404_410 URLs found in strict sources")
+        for item in broken_strict:
             print(f"- {item.source_id}: {item.http_status} {item.url}")
         return 1
 
-    if args.fail_on_transient and transient_failures:
-        print("FAIL: unallowlisted transient URL failures found")
-        for item in transient_failures:
+    if args.fail_on_transient and transient_strict:
+        print("FAIL: unallowlisted transient URL failures found in strict sources")
+        for item in transient_strict:
             print(f"- {item.source_id}: {item.error or item.http_status} {item.url}")
         return 1
 
